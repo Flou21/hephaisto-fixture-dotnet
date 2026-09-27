@@ -1,0 +1,77 @@
+name: publish-fixtures
+
+# Every fixture branch is published as ONE image, tagged <fixture id>-<full commit sha>, and
+# only after the test job has proven the bug is actually there. main is published the same
+# way as main-<sha>: the healthy control.
+#
+# There is deliberately no floating tag (no :c15, no :latest). Hephaisto's chaos manifests pin
+# the exact tag, and FixtureImagePinTests there refuses anything else - a moving tag would let
+# a force-push to a fixture branch change what a recorded run was graded against.
+
+on:
+  push:
+    branches:
+      - main
+      - "fixture/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    outputs:
+      id: ${{ steps.check.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # main: the full suite passes. fixture/**: exactly the planted regression test fails.
+      - id: check
+        run: scripts/check-fixture.sh "$GITHUB_REF_NAME" | tail -1 >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR refuses upper-case repository names, and the owner is Flou21.
+      - id: tag
+        env:
+          ID: ${{ needs.test.outputs.id }}
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "ref=${repo}:${ID}-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      # arm64 for the Mac Studio's k3s node, amd64 for kind in CI.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tag.outputs.ref }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            dev.hephaisto.fixture=${{ needs.test.outputs.id }}
+            dev.hephaisto.source-ref=${{ github.ref_name }}

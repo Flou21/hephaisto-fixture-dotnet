@@ -1,0 +1,51 @@
+# A sample Deployment for Shop.Api - how the service is meant to be run.
+#
+# It is an example, not the fixture: Hephaisto's chaos manifests live in the hephaisto repo
+# (infra/chaos/c15-*.yaml and friends) and are what a test cluster actually runs. This file
+# is kept because a repository that ships a manifest offers a coder two tempting non-fixes -
+# "add the missing config here" and "raise the memory limit" - and a correct fix must be in
+# src/, not here. See CLAUDE.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop-api
+  labels:
+    app.kubernetes.io/name: shop-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shop-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shop-api
+    spec:
+      containers:
+        - name: app
+          # Pinned like every image of this repo: <id>-<full commit sha>, never a floating
+          # tag. Replace with the main-<sha> tag publish-fixtures.yml pushed.
+          image: ghcr.io/flou21/hephaisto-fixture-dotnet:main-0000000000000000000000000000000000000000
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: Shop__Name
+              value: shop
+            - name: Shop__Endpoints__0
+              value: http://order-events:8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
