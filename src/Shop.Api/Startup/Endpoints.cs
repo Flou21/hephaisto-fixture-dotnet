@@ -14,9 +14,9 @@ public static class Endpoints
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        if (options.Endpoints is not { Count: > 0 } endpoints)
+        if (options.Endpoints.Count == 0)
             return Local;
 
-        return endpoints[0];
+        return options.Endpoints[0];
     }
 }
