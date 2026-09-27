@@ -5,6 +5,8 @@ using Shop.Api.Startup;
 
 var builder = WebApplication.CreateBuilder(args);
 
+Notices.Print(builder.Configuration, Console.Out);
+
 builder.Services.AddOptions<ShopOptions>().Bind(builder.Configuration.GetSection(ShopOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<OrderStore>();
